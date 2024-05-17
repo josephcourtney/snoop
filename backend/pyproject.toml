@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "snoop"
+dynamic = ["version"]
+description = "snoop-de-doop"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Joseph M Courtney", email = "joseph.m.courtney@gmail.com" },
+]
+maintainers = [
+    { name = "Joseph M Courtney", email = "joseph.m.courtney@gmail.com" },
+]
+dependencies = [
+    "mitmproxy>=10.0.0",
+    "websockets>=10.0",
+    "fastapi>=0.78.0",
+    "sqlmodel>=0.0.6",
+    "pytest>=6.0",
+    "pytest-mock>=3.0",
+    "ruff>=0.0.263",
+    "python-dotenv>=0.19.0",
+]
+requires-python = ">=3.12"
+
+[project.optional-dependencies]
+dev = ["ruff", "mypy", "pytest", "pytest-asyncio", "pytest-mock"]
+
+[tool.hatch.version]
+path = "snoop/__init__.py"
+
+[tool.mypy]
+files = ["ruff_lsp", "tests"]
+no_implicit_optional = true
+check_untyped_defs = true
+
+# [[tool.mypy.overrides]]
+# ignore_missing_imports = true
