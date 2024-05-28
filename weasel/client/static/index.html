@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--<title>WebSocket Client Demo</title>-->
+  </head>
+  <body>
+    <!--<h1>WebSocket Client Demo</h1>-->
+    <div>
+      <textarea
+        id="messageInput"
+        placeholder="Enter your message here..."
+        rows="4"
+        cols="50"
+      ></textarea>
+      <br />
+      <button id="sendButton">Send Message</button>
+    </div>
+    <div>
+      <h2>Settings</h2>
+      <label for="retryInterval">Retry Interval (ms):</label>
+      <input type="number" id="retryInterval" value="1000" /><br />
+      <label for="maxRetries">Max Retries:</label>
+      <input type="number" id="maxRetries" value="5" /><br />
+      <label for="chunkSize">Chunk Size (bytes):</label>
+      <input type="number" id="chunkSize" value="512" /><br />
+      <label for="responseTimeout">Response Timeout (ms):</label>
+      <input type="number" id="responseTimeout" value="5000" /><br />
+      <label for="logLevel">Log Level:</label>
+      <select id="logLevel">
+        <option value="debug" selected>Debug</option>
+        <option value="info">Info</option>
+        <option value="log">Log</option>
+        <option value="warning">Warning</option>
+        <option value="error">Error</option>
+      </select>
+      <br />
+      <button id="applySettings">Apply Settings</button>
+      <button id="clearStorage">Clear Local Storage</button>
+      <button id="resetSettings">Reset Settings</button>
+    </div>
+    <div>
+      <h2>Logs</h2>
+      <pre id="logs"></pre>
+    </div>
+    <script type="module">
+      import { WeaselClient } from './static/weasel/WeaselClient.js';
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const wsClient = new WeaselClient("ws://localhost:8767/ws", {
+          retryInterval: 1000,
+          maxRetries: 5,
+          chunkSize: 512,
+          responseTimeout: 5000,
+          debug: true,
+          logLevel: "debug",
+          localStorageKey: "weaselClientDemo",
+        });
+
+        const messageInput = document.getElementById("messageInput");
+        const sendButton = document.getElementById("sendButton");
+        const logs = document.getElementById("logs");
+        const retryInterval = document.getElementById("retryInterval");
+        const maxRetries = document.getElementById("maxRetries");
+        const chunkSize = document.getElementById("chunkSize");
+        const responseTimeout = document.getElementById("responseTimeout");
+        const logLevel = document.getElementById("logLevel");
+        const applySettings = document.getElementById("applySettings");
+        const clearStorage = document.getElementById("clearStorage");
+        const resetSettings = document.getElementById("resetSettings");
+
+        const logMessage = (message) => {
+          logs.textContent += `${message}\n`;
+        };
+
+        wsClient.externalLog = logMessage; // Register external log function
+
+        sendButton.addEventListener("click", () => {
+          const message = messageInput.value.trim();
+          if (message) {
+            wsClient.send({ type: "message", content: message });
+            messageInput.value = "";
+          } else {
+            logMessage("[ERROR] Cannot send an empty message.");
+          }
+        });
+
+        applySettings.addEventListener("click", () => {
+          wsClient.retryInterval = parseInt(retryInterval.value, 10);
+          wsClient.maxRetries = parseInt(maxRetries.value, 10);
+          wsClient.chunkSize = parseInt(chunkSize.value, 10);
+          wsClient.responseTimeout = parseInt(responseTimeout.value, 10);
+          wsClient.logLevel = logLevel.value;
+          logMessage("[INFO] Settings applied.");
+        });
+
+        clearStorage.addEventListener("click", () => {
+          wsClient.clearLocalStorage();
+          logMessage("[INFO] Local storage cleared.");
+        });
+
+        resetSettings.addEventListener("click", () => {
+          wsClient.resetSettings();
+          retryInterval.value = 1000;
+          maxRetries.value = 5;
+          chunkSize.value = 512;
+          responseTimeout.value = 5000;
+          logLevel.value = "debug";
+          logMessage("[INFO] Settings reset to defaults.");
+        });
+      });
+    </script>
+  </body>
+</html>

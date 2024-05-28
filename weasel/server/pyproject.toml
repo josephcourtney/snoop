@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "weasel"
+version = "0.0.1"
+description = ""
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Joseph M Courtney", email = "joseph.m.courtney@gmail.com" },
+]
+maintainers = [
+    { name = "Joseph M Courtney", email = "joseph.m.courtney@gmail.com" },
+]
+dependencies = [
+    "fastapi>=0.78.0",
+    "sqlmodel>=0.0.6",
+    "uvicorn>=0.15.0",
+    "pydantic>=1.8.2",
+    "pytest>=6.0",
+]
+requires-python = ">=3.12"
+
+[project.optional-dependencies]
+dev = ["ruff", "mypy", "pytest"]
+
+[project.scripts]
+weasel_server = "scripts.run_server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/weasel", "scripts"]

@@ -1,0 +1,17 @@
+[project]
+name = "apriquot"
+version = "0.1.0"
+description = "advanced task queue"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    { name = "Joseph M Courtney", email = "joseph.m.courtney@gmail.com" },
+]
+dependencies = [
+    "pytest",
+    "psutil",
+    "rich",
+    "pytest-asyncio",
+    "pytest-timeout",
+    "freezegun",
+]
