@@ -42,4 +42,7 @@ logging_config = {
         },
     },
     "loggers": {"root": {"level": "DEBUG", "handlers": ["queue_handler"]}},
+    "serialization": {
+        "max_generator_elements": 16,
+    },
 }

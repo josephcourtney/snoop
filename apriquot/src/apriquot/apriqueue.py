@@ -40,7 +40,7 @@ class ApriQueue:
         with self.lock:
             new_group = ItemGroup(self.group_defaults | kwargs)
             self.groups[new_group.id] = new_group
-            self.logger.debug("Group created", extra={"group": new_group.serialize()})
+            self.logger.debug("Group created", extra={"group": new_group})
         return new_group.id
 
     def has_cyclic_dependency(self, item_id: str, dependencies: list[str]) -> bool:
@@ -75,40 +75,38 @@ class ApriQueue:
         self.logger.debug(
             "Pushing item",
             extra={
-                "item": new_item.serialize(),
-                "queue": self.serialize(),
+                "item": new_item,
+                "queue": self,
             },
         )
 
         if new_item.deadline and new_item.deadline < current_time:
             msg = f"Item {new_item.id} has already expired"
-            self.logger.error("Item has already expired", extra={"item": new_item.serialize()})
+            self.logger.error("Item has already expired", extra={"item": new_item})
             raise ItemExpiredError(msg)
 
         if new_item.matures and new_item.deadline and new_item.deadline < new_item.matures:
             msg = f"Item {new_item.id} expires before maturation"
-            self.logger.error("Item expires before maturation", extra={"item": new_item.serialize()})
+            self.logger.error("Item expires before maturation", extra={"item": new_item})
             raise ValueError(msg)
 
         if self.has_cyclic_dependency(new_item.id, new_item.dependencies):
             msg = f"Adding item {new_item.id} would create a cyclic dependency"
-            self.logger.error("Cyclic dependency detected", extra={"item": new_item.serialize()})
+            self.logger.error("Cyclic dependency detected", extra={"item": new_item})
             raise ValueError(msg)
 
         with self.lock:
-            if new_item.matures and new_item.matures > current_time:
-                heapq.heappush(self.maturation_heap, (new_item.matures, new_item))
-                self.logger.debug("Item added to the maturation heap", extra={"item": new_item.serialize()})
-            else:
-                heapq.heappush(self.priority_heap, new_item)
-                self.logger.debug("Item added to the priority heap", extra={"item": new_item.serialize()})
             if new_item.deadline:
                 heapq.heappush(self.expiration_heap, (new_item.deadline, new_item))
-                self.logger.debug("Item added to the expiration heap", extra={"item": new_item.serialize()})
+                self.logger.debug("Item added to the expiration heap", extra={"item": new_item})
+            if new_item.matures and new_item.matures > current_time:
+                heapq.heappush(self.maturation_heap, (new_item.matures, new_item))
+                self.logger.debug("Item added to the maturation heap", extra={"item": new_item})
+            else:
+                heapq.heappush(self.priority_heap, new_item)
+                self.logger.debug("Item added to the priority heap", extra={"item": new_item})
             self.item_map[new_item.id] = new_item
-            self.logger.info(
-                "Item successfully pushed", extra={"item": new_item.serialize(), "queue": self.serialize()}
-            )
+            self.logger.info("Item successfully pushed", extra={"item": new_item, "queue": self})
 
         return new_item.id
 
@@ -119,16 +117,16 @@ class ApriQueue:
         with self.lock:
             if item.matures:
                 heapq.heappush(self.maturation_heap, (item.matures, item))
-            self.logger.info("Item retried", extra={"item": item.serialize()})
+            self.logger.info("Item retried", extra={"item": item})
             if item.retries >= item.max_retries:
                 return False
             if item.retries >= item.max_retries - 1:
-                self.logger.warning("Item on last retry", extra={"item": item.serialize()})
+                self.logger.warning("Item on last retry", extra={"item": item})
             return True
 
     def pop(self) -> Item:
         with self.lock:
-            self.logger.info("Attempting to pop", extra={"queue": self.serialize()})
+            self.logger.info("Attempting to pop", extra={"queue": self})
             if not self.priority_heap and not self.maturation_heap:
                 msg = "Pop from an empty priority heap"
                 self.logger.warning("Pop from an empty priority heap")
@@ -137,7 +135,7 @@ class ApriQueue:
             self.logger.debug(
                 "Attempting to pop",
                 extra={
-                    "queue": self.serialize(),
+                    "queue": self,
                 },
             )
 
@@ -146,7 +144,7 @@ class ApriQueue:
             self._update_priorities()
 
             item = self._pop_next_eligible_item()
-            self.logger.info("Item successfully popped", extra={"item": item.serialize()})
+            self.logger.info("Item successfully popped", extra={"item": item})
             return item
 
     def _move_matured_items_to_priority_heap(self) -> None:
@@ -155,18 +153,14 @@ class ApriQueue:
             _, matured_item = heapq.heappop(self.maturation_heap)
             matured_item.state = ItemState.READY
             heapq.heappush(self.priority_heap, matured_item)
-            self.logger.debug(
-                "Item has matured and moved to priority heap", extra={"item": matured_item.serialize()}
-            )
+            self.logger.debug("Item has matured and moved to priority heap", extra={"item": matured_item})
 
     def _remove_expired_items(self) -> None:
         current_time = datetime.now(tz=UTC)
         while self.expiration_heap and self.expiration_heap[0][0] <= current_time:
             _, expired_item = heapq.heappop(self.expiration_heap)
             expired_item.state = ItemState.EXPIRED
-            self.logger.debug(
-                "Item has expired and removed from priority heap", extra={"item": expired_item.serialize()}
-            )
+            self.logger.debug("Item has expired and removed from priority heap", extra={"item": expired_item})
 
     def _update_priorities(self) -> None:
         self.priority_heap = [item for item in self.priority_heap if item.state != ItemState.READY]
@@ -181,53 +175,53 @@ class ApriQueue:
             if item.state == ItemState.EXPIRED:
                 self.logger.debug(
                     "Item is expired and will be removed from priority heap.",
-                    extra={"item": item.serialize()},
+                    extra={"item": item},
                 )
                 continue
             if item.state == ItemState.IMMATURE:
                 if item.matures > current_time:
                     self.logger.debug(
                         "Item is immature and will be moved back to maturation heap.",
-                        extra={"item": item.serialize()},
+                        extra={"item": item},
                     )
                     heapq.heappush(self.maturation_heap, (item.matures, item))
                     continue
+                item.state = ItemState.READY
                 if item.matures is None:
-                    item.state = ItemState.READY
                     self.logger.info(
                         "Item marked as immature but it does not have a maturation time.",
-                        extra={"item": item.serialize()},
+                        extra={"item": item},
                     )
                 else:
-                    item.state = ItemState.READY
                     self.logger.info(
                         "Item marked as immature but it is after its maturation time.",
-                        extra={"item": item.serialize()},
+                        extra={"item": item},
                     )
 
             if any(dep not in self.completed_items for dep in item.dependencies):
-                self.logger.debug("Item has unmet dependencies.", extra={"item": item.serialize()})
+                self.logger.debug("Item has unmet dependencies.", extra={"item": item})
                 to_requeue.append(item)
                 continue
 
             if (group := self.groups.get(item.group)) is None and not group.consume_tokens(item.cost):
                 self.logger.debug(
-                    "Item's group has insufficient tokens.", extra={"item": item, "group": group.serialize()}
+                    "Item's group has insufficient tokens.", extra={"item": item, "group": group}
                 )
                 to_requeue.append(item)
                 continue
             break
 
+        self.logger.debug("Requeueing inelligible items", extra={"to_requeue": list(to_requeue)})
         for e in to_requeue:
             heapq.heappush(self.priority_heap, e)
 
         if item is None:
             msg = "No eligible items to pop at the current time"
-            self.logger.debug(msg, extra={"queue": self.serialize()})
+            self.logger.debug(msg, extra={"queue": self})
             raise QueueEmptyError(msg)
         item.state = ItemState.IN_PROGRESS
         item.last_popped = current_time
-        self.logger.debug("Item popped from queue and is now in progress", extra={"item": item.serialize()})
+        self.logger.debug("Item popped from queue and is now in progress", extra={"item": item})
         return item
 
     def save(self, file_path: Path | str) -> None:
@@ -292,10 +286,10 @@ class ApriQueue:
 
     def serialize(self):
         return {
-            "maturation_heap": [e.serialize() for _, e in self.maturation_heap],
-            "priority_heap": [e.serialize() for e in self.priority_heap],
-            "expiration_heap": [e.serialize() for _, e in self.expiration_heap],
-            "groups": {k: v.serialize() for k, v in self.groups.items()},
-            "completed_items": list(self.completed_items),
-            "failed_items": list(self.failed_items),
+            "maturation_heap": self.maturation_heap,
+            "priority_heap": self.priority_heap,
+            "expiration_heap": self.expiration_heap,
+            "groups": self.groups,
+            "completed_items": self.completed_items,
+            "failed_items": self.failed_items,
         }

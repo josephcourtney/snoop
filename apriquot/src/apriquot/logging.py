@@ -3,7 +3,7 @@ import datetime as dt
 import json
 import logging
 import logging.config
-from collections.abc import Iterable
+from collections.abc import Generator, Iterable
 from pathlib import Path
 from typing import override
 
@@ -34,6 +34,122 @@ LOG_RECORD_BUILTIN_ATTRS = {
     "threadName",
     "taskName",
 }
+
+
+def serialize(obj: object) -> dict:
+    """
+    Convert an object's public properties to a dictionary using a stack-based approach.
+
+    This function serializes an object's public properties into a dictionary, handling
+    various data types including basic types, collections, classes, and objects with
+    special serialization needs. It avoids recursion to prevent potential recursion depth
+    errors in deeply nested objects by using a stack-based approach.
+
+    Args:
+        obj (object): The object to be serialized.
+
+    Returns:
+        dict: A dictionary representation of the object's public properties.
+
+    Edge Cases:
+        - Circular References: Detected using object IDs and paths, marked as "CircularReference".
+        - Callable Attributes: Ignored during serialization to avoid executing methods.
+        - Objects with __slots__: Serialized by extracting the values of defined slots.
+        - Generators: Represented by their string representation to avoid execution.
+        - Iterable objects: Converted into a list representation to capture their elements.
+        - Classes: Represented by their class name and type.
+
+    Design Choices:
+        - Stack-Based Approach: Prevents recursion limit errors by using an iterative stack-based
+          method instead of recursion, which is more robust for deeply nested objects.
+        - Pattern Matching: Utilizes the modern pattern matching syntax (PEP 634) for cleaner
+          and more readable type checks.
+        - Object IDs: Uses the id() function to uniquely identify objects and detect circular or
+          self-references, which ensures the integrity of the serialization process. The use of id()
+          is needed because objects may not be hashable, and two different objects may have
+          identical hashes.
+
+    Examples:
+        >>> class Example:
+        ...     def __init__(self, x, y):
+        ...         self.x = x
+        ...         self.y = y
+        >>> obj = Example(1, [2, 3])
+        >>> serialize(obj)
+        {'x': 1, 'y': [2, 3], 'class': 'Example'}
+    """
+    stack = [(obj, None, None, ())]
+    result = None
+    seen = {}
+
+    while stack:
+        current_obj, parent, parent_key, path = stack.pop()
+
+        if id(current_obj) in seen:
+            if seen[id(current_obj)] == path:
+                parent[parent_key] = ("SelfReference", seen[id(current_obj)])
+            else:
+                parent[parent_key] = ("CircularReference", seen[id(current_obj)])
+            continue
+        seen[id(current_obj)] = path
+
+        match current_obj:
+            case bytes() | str() | int() | float() | bool() | None:
+                current_result = current_obj
+            case list() as lst:
+                current_result = [None] * len(lst)
+                stack.extend((item, current_result, idx, (*path, idx)) for idx, item in enumerate(lst))
+            case dict() as dct:
+                current_result = {}
+                stack.extend((v, current_result, k, (*path, k)) for k, v in dct.items() if not callable(v))
+            case set() as st:
+                current_result = [None] * len(st)
+                stack.extend((item, current_result, idx, (*path, idx)) for idx, item in enumerate(st))
+            case frozenset() as fst:
+                current_result = [None] * len(fst)
+                stack.extend((item, current_result, idx, (*path, idx)) for idx, item in enumerate(fst))
+            case tuple() as tpl:
+                current_result = [None] * len(tpl)
+                stack.extend((item, current_result, idx, (*path, idx)) for idx, item in enumerate(tpl))
+            case obj if hasattr(obj, "serialize") and callable(obj.serialize):
+                serialized = obj.serialize()
+                if isinstance(serialized, dict):
+                    serialized["class"] = obj.__class__.__name__
+                stack.append((serialized, parent, parent_key, path))
+                continue
+            case obj if hasattr(obj, "__slots__"):
+                current_result = {
+                    slot: getattr(obj, slot)
+                    for slot in obj.__slots__
+                    if hasattr(obj, slot) and not callable(getattr(obj, slot))
+                }
+                current_result["class"] = obj.__class__.__name__
+            case cls if isinstance(cls, type):
+                current_result = {"class": type(cls).__name__, "name": cls.__name__}
+            case gen if isinstance(gen, Generator):
+                current_result = repr(current_obj)
+            case itr if isinstance(itr, Iterable):
+                current_result = {"class": obj.__class__.__name__}
+                iter_result = list(iter(obj))
+                current_result["__iter__"] = [None] * len(iter_result)
+                stack.extend(
+                    (item, current_result["__iter__"], idx, (*path, idx))
+                    for idx, item in enumerate(iter_result)
+                )
+            case obj if hasattr(obj, "__dict__"):
+                current_result = {
+                    k: v for k, v in obj.__dict__.items() if not k.startswith("_") and not callable(v)
+                }
+                current_result["class"] = obj.__class__.__name__
+            case _:
+                current_result = repr(current_obj)
+
+        if parent is not None:
+            parent[parent_key] = current_result
+        else:
+            result = current_result
+
+    return result
 
 
 class JSONFormatter(logging.Formatter):
@@ -67,13 +183,7 @@ class JSONFormatter(logging.Formatter):
         } | always_fields
         for key, val in record.__dict__.items():
             if key not in LOG_RECORD_BUILTIN_ATTRS:
-                if isinstance(val, dict):
-                    message[key] = dict(val)
-                elif isinstance(val, Iterable) and not isinstance(val, str | bytes):
-                    elements = list(val)
-                    message[key] = dict(elements) if len(elements[0]) == 2 else elements  # noqa: PLR2004
-                else:
-                    message[key] = val
+                message[key] = serialize(val)
 
         return message
 
