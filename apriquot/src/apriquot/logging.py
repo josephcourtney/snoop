@@ -5,7 +5,6 @@ import logging
 import logging.config
 from collections.abc import Generator, Iterable
 from pathlib import Path
-from typing import override
 
 from .config import logging_config
 
@@ -48,7 +47,8 @@ def serialize(obj: object) -> dict:
     Args:
         obj (object): The object to be serialized.
 
-    Returns:
+    Returns
+    -------
         dict: A dictionary representation of the object's public properties.
 
     Edge Cases:
@@ -69,7 +69,8 @@ def serialize(obj: object) -> dict:
           is needed because objects may not be hashable, and two different objects may have
           identical hashes.
 
-    Examples:
+    Examples
+    --------
         >>> class Example:
         ...     def __init__(self, x, y):
         ...         self.x = x
@@ -161,7 +162,6 @@ class JSONFormatter(logging.Formatter):
         super().__init__()
         self.fmt_keys = fmt_keys if fmt_keys is not None else {}
 
-    @override
     def format(self, record: logging.LogRecord) -> str:
         message = self._prepare_log_dict(record)
         return json.dumps(message, default=str)
@@ -189,13 +189,12 @@ class JSONFormatter(logging.Formatter):
 
 
 class NonErrorFilter(logging.Filter):
-    @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
         return record.levelno <= logging.INFO
 
 
 def get_logger(level="DEBUG"):
-    logger = logging.getLogger("weasel-server")  # __name__ is a common choice
+    logger = logging.getLogger(__name__)
     for handler_config in logging_config["handlers"].values():
         if (log_file := handler_config.get("filename")) is not None:
             Path(log_file).resolve().parent.mkdir(parents=True, exist_ok=True)

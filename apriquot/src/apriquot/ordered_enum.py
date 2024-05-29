@@ -7,38 +7,6 @@ class InvalidEnumValueError(ValueError):
 
 
 class OrderedEnum(StrEnum):
-    def __new__(cls, value: str) -> Self:
-        """
-        Create a new enum member with the given value.
-
-        Args:
-            value (str): The value for the enum member.
-
-        Returns
-        -------
-            OrderedEnum: The created enum member.
-        """
-        obj = str.__new__(cls, value)
-        obj._value_ = value
-        return obj
-
-    @classmethod
-    def _generate_next_value(cls, name: str, start: int, count: int, last_values: list[str]) -> str:  # noqa: ARG003 # this overrides an existing method
-        """
-        Generate the next value for the enum member.
-
-        Args:
-            name (str): The name of the enum member.
-            start (int): The start value.
-            count (int): The count of members.
-            last_values (list[str]): The last values used.
-
-        Returns
-        -------
-            str: The generated value.
-        """
-        return name.lower()
-
     def __eq__(self, other: object) -> bool:
         """
         Check equality with another object.

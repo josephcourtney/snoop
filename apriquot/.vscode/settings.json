@@ -1,6 +1,7 @@
 {
     "python.testing.pytestArgs": [
-        "tests"
+        "tests",
+        "--cov=apriquot"
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true

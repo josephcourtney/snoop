@@ -4,6 +4,7 @@ import uuid
 from enum import auto
 from typing import Any, TypedDict
 
+from .logging import get_logger
 from .ordered_enum import OrderedEnum
 
 
@@ -49,8 +50,11 @@ class Item:
         self.minimum_fractional_priority: float = spec.get("minimum_fractional_priority", 0.1)
         self.cost: int = spec.get("cost", 1)
         self.aging_factor: float = spec.get("aging_factor", 0.9)
-        self.matures: datetime.datetime | None = spec.get("matures")
-        self.deadline: datetime.datetime | None = spec.get("deadline")
+        self.enqueued = datetime.datetime.now(tz=datetime.UTC)
+        self.matures: datetime.datetime = spec.get("matures") or self.enqueued
+        self.deadline: datetime.datetime = spec.get("deadline") or self.enqueued + datetime.timedelta(
+            weeks=52
+        )
         self.max_retries: int = spec.get("max_retries", 3)
         self.backoff_factor: float = spec.get("backoff_factor", 2.0)
         self.base_retry_delay: float = spec.get("base_retry_delay", 0.1)
@@ -60,17 +64,13 @@ class Item:
             "dependencies", []
         )  # List of item IDs that this item depends on
 
+        self.logger = get_logger()
+
         self.id: str = str(uuid.uuid4())
         self.retries: int = 0
-        self.enqueued = datetime.datetime.now(tz=datetime.UTC)
         self.last_popped: datetime.datetime | None = None
 
-        if self.matures is None:
-            self.matures = self.enqueued
-        if self.deadline is None:
-            self.deadline = self.enqueued + datetime.timedelta(weeks=52)
-
-        if not isinstance(self.priority, int | float) or self.priority < 0:
+        if self.priority < 0:
             msg = "Priority must be a non-negative integer"
             raise ValueError(msg)
 
@@ -87,7 +87,12 @@ class Item:
             jitter = random.uniform(-self.jitter / 2, self.jitter / 2)  # noqa: S311
             delay = self.base_retry_delay * (self.backoff_factor**self.retries) * (1 + jitter)
             earliest_retry = (self.last_popped or self.enqueued) + datetime.timedelta(seconds=delay)
-            self.matures = max(self.matures, earliest_retry) if self.matures else earliest_retry
+            self.matures = max(self.matures, earliest_retry)
+
+            self.logger.error(
+                "maturation time updated",
+                extra={"item_id": self.id, "maturation": self.matures, "delay": delay},
+            )
 
     @property
     def age(self):
@@ -113,8 +118,7 @@ class Item:
 
     def __iter__(self):
         """Iterate over (property name, property value) tuples, for serialization."""
-        yield "class", type(self)
-        yield from self.__dict__.items()
+        return iter({"class": type(self), **self.__dict__}.items())
 
     def serialize(self):
         return dict(self)

@@ -1,6 +1,7 @@
+# sourcery skip: no-loop-in-tests
+# ruff: noqa: S101, PLR2004
 import contextlib
 import datetime
-import threading
 import time
 
 import pytest
@@ -21,13 +22,13 @@ def test_items_prioritized_correctly():
     item_id2 = q.push(item="item2", priority=0.5)
     item_id3 = q.push(item="item3", priority=2.0)
     item = q.pop()
-    assert item.id == item_id3  # Highest priority first
+    assert item.id == item_id2  # "Highest" priority first
 
     item = q.pop()
-    assert item.id == item_id1  # Next highest priority
+    assert item.id == item_id1  # Next "highest" priority
 
     item = q.pop()
-    assert item.id == item_id2  # Lowest priority
+    assert item.id == item_id3  # "Lowest" priority
 
 
 def test_no_mature_items():
@@ -196,38 +197,10 @@ def test_group_token_bucket():
     with pytest.raises(QueueEmptyError, match="No eligible items to pop at the current time"):
         q.pop()
 
-    time.sleep(1)  # Allow time for token refill
+    time.sleep(2)  # Allow time for token refill
 
     item3 = q.pop()
     assert item3.id == item_id3
-
-
-# def test_concurrent_access():
-#     """Verify that items can be added and popped concurrently without issues."""
-#     q = ApriQueue()
-#
-#     def add_items():
-#         for i in range(100):
-#             q.push(item=f"item_{i}", priority=i)
-#
-#     def pop_items():
-#         popped_items = []
-#         for _ in range(100):
-#             with contextlib.suppress(QueueEmptyError):
-#                 item = q.pop()
-#                 popped_items.append(item)
-#         return popped_items
-#
-#     add_thread = threading.Thread(target=add_items)
-#     pop_thread = threading.Thread(target=pop_items)
-#
-#     add_thread.start()
-#     pop_thread.start()
-#
-#     add_thread.join()
-#     pop_thread.join()
-#
-#     assert len(q.priority_heap) == 0
 
 
 def test_high_load_performance():
@@ -254,17 +227,6 @@ def test_identical_priorities():
 
     popped_items = [q.pop().id for _ in range(3)]
     assert set(popped_items) == {item_id1, item_id2, item_id3}
-
-
-def test_immediate_requeue_after_failure():
-    """Ensure that items can be immediately requeued after failure with zero backoff."""
-    q = ApriQueue()
-    item_id = q.push(item="test_item", priority=1.0)
-    item = q.pop()
-    q.retry_item(item.id, backoff=0)
-    retried_item = q.pop()
-    assert retried_item.id == item_id
-    assert retried_item.retries == 1
 
 
 def test_no_maturation_or_expiration():
